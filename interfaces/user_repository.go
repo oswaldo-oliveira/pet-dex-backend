@@ -13,5 +13,6 @@ type UserRepository interface {
 	FindByEmail(email string) (*entity.User, error)
 	List() ([]entity.User, error)
 	ChangePassword(userId uniqueEntityId.ID, newPassword string) error
+	Enabled2FA(userID uniqueEntityId.ID, enabled2FA bool) error
 	AdressRepo
 }

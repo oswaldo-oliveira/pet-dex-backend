@@ -1,0 +1,2 @@
+ALTER TABLE users DROP COLUMN 2fa_code VARCHAR(6);
+ALTER TABLE users DROP COLUMN 2fa_expire_date TIMESTAMP;

@@ -12,4 +12,5 @@ type UserUpdateDto struct {
 	Phone                    string     `json:"phone" db:"phone"`
 	BirthDate                *time.Time `json:"birthdate"`
 	PushNotificationsEnabled *bool      `json:"pushNotificationsEnabled" db:"pushNotificationsEnabled"`
+	Enabled2FA               bool       `json:"enabled2FA" db:"2fa_enabled"`
 }

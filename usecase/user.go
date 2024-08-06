@@ -1,8 +1,10 @@
 package usecase
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"pet-dex-backend/v2/entity"
 	"pet-dex-backend/v2/entity/dto"
 	"pet-dex-backend/v2/infra/config"
@@ -15,15 +17,17 @@ import (
 
 type UserUsecase struct {
 	repo        interfaces.UserRepository
+	emailRepo   interfaces.Emailrepository
 	hasher      interfaces.Hasher
 	encoder     interfaces.Encoder
 	logger      config.Logger
 	ssoProvider interfaces.SingleSignOnProvider
 }
 
-func NewUserUsecase(repo interfaces.UserRepository, hasher interfaces.Hasher, encoder interfaces.Encoder, ssoProvider interfaces.SingleSignOnProvider) *UserUsecase {
+func NewUserUsecase(repo interfaces.UserRepository, emailRepo interfaces.Emailrepository, hasher interfaces.Hasher, encoder interfaces.Encoder, ssoProvider interfaces.SingleSignOnProvider) *UserUsecase {
 	return &UserUsecase{
 		repo:        repo,
+		emailRepo:   emailRepo,
 		hasher:      hasher,
 		encoder:     encoder,
 		logger:      *config.GetLogger("user-usecase"),
@@ -57,27 +61,44 @@ func (uc *UserUsecase) Save(userDto dto.UserInsertDto) error {
 	return nil
 }
 
-func (uc *UserUsecase) Login(loginDto *dto.UserLoginDto) (string, error) {
+func (uc *UserUsecase) Login(loginDto *dto.UserLoginDto) (*entity.User, error) {
 	user, err := uc.FindByEmail(loginDto.Email)
 	if err != nil {
-		return "", errors.New("invalid credentials")
+		return nil, errors.New("invalid credentials")
 	}
 
 	if user.Name == "" {
-		return "", errors.New("invalid credentials")
+		return nil, errors.New("invalid credentials")
 	}
 	if !uc.hasher.Compare(loginDto.Password, user.Pass) {
-		return "", errors.New("invalid credentials")
+		return nil, errors.New("invalid credentials")
 	}
-	token, _ := uc.encoder.NewAccessToken(interfaces.UserClaims{
-		Id:    user.ID.String(),
-		Name:  user.Name,
-		Email: user.Email,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(time.Hour).Unix(),
-		},
-	})
-	return token, nil
+
+	if !user.Enabled2FA {
+		return user, nil
+	}
+
+	if time.Now().Before(time.Unix(int64(user.ExpireDate2FA), 0)) {
+		newExpireDate := time.Now().Add(5 * time.Minute)
+		user.ExpireDate2FA = int(newExpireDate.Unix())
+		uc.repo.Save(user)
+		return nil, errors.New("the email has already been sent")
+	}
+
+	code, err := generate2faCode()
+
+	if err != nil {
+		return nil, errors.New("error generating code")
+	}
+
+	uc.emailRepo.
+		SendNotificationEmail(fmt.Sprintf("Esse é o seu código de login %s", code), user.Email)
+
+	//TODO: verificar se ja foi enviado o email 5min, se for return error.
+	//TODO: verificar 2fa atual valido, se for valido, atualizar expire_date, sendEmail()
+	//TODO: se nao for valido, gera o codigo e envia o email.
+
+	return nil, nil
 }
 
 func (uc *UserUsecase) Update(userID uniqueEntityId.ID, userDto dto.UserUpdateDto) error {
@@ -201,4 +222,24 @@ func (uc *UserUsecase) NewAccessToken(id string, name string, email string) (str
 			ExpiresAt: time.Now().Add(time.Hour).Unix(),
 		},
 	})
+}
+
+func (uc *UserUsecase) Enabled2FA(userId uniqueEntityId.ID, enabled2FA bool) error {
+	err := uc.repo.Enabled2FA(userId, enabled2FA)
+
+	if err != nil {
+		uc.logger.Error("error enabled 2FA: ", err)
+		return err
+	}
+
+	return nil
+}
+
+func generate2faCode() (string, error) {
+	max := big.NewInt(1000000) // 1 milhão para garantir 6 dígitos (000000 a 999999)
+	n, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return "", err
+	}
+	return n.String(), nil
 }

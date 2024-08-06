@@ -122,6 +122,42 @@ func (ur *UserRepository) Update(userID uniqueEntityId.ID, userToUpdate entity.U
 		values = append(values, userToUpdate.PushNotificationsEnabled)
 	}
 
+	if userToUpdate.Code2FA != "" {
+		query = query + " 2fa_code =?,"
+		values = append(values, userToUpdate.Code2FA)
+	}
+
+	if userToUpdate.ExpireDate2FA != 0 {
+		query = query + " 2fa_expire_date =?,"
+		values = append(values, userToUpdate.ExpireDate2FA)
+	}
+
+	query = query + " updated_at =?,"
+	values = append(values, time.Now())
+
+	n := len(query)
+	query = query[:n-1] + " WHERE id =?"
+	values = append(values, userID)
+
+	fmt.Printf("Query to update: %s", query)
+
+	_, err := ur.dbconnection.Exec(query, values...)
+
+	if err != nil {
+		ur.logger.Error(fmt.Errorf("#UserRepository.Update error: %w", err))
+		return fmt.Errorf("error on update user")
+	}
+
+	return nil
+}
+
+func (ur *UserRepository) Enabled2FA(userID uniqueEntityId.ID, enabled2FA bool) error {
+	query := "UPDATE users SET"
+	values := []interface{}{}
+
+	query = query + " 2fa_enabled =?,"
+	values = append(values, enabled2FA)
+
 	query = query + " updated_at =?,"
 	values = append(values, time.Now())
 

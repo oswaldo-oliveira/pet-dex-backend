@@ -65,22 +65,45 @@ func (uc *UserController) Login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	token, err := uc.usecase.Login(&userLoginDto)
+
+	user, err := uc.usecase.Login(&userLoginDto)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
-	w.Header().Add("Authorization", token)
+
+	if user != nil {
+		token, err := uc.usecase.NewAccessToken(user.ID.String(), user.Name, user.Email)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Add("Authorization", token)
+		json_err := json.NewEncoder(w).Encode(struct {
+			Token string `json:"token"`
+		}{
+			Token: token,
+		})
+		if json_err != nil {
+			logger.Error("error encoding json", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(200)
+		return
+	}
+
 	json_err := json.NewEncoder(w).Encode(struct {
-		Token string `json:"token"`
+		Code2FA bool `json:"2fa"`
 	}{
-		Token: token,
+		Code2FA: true,
 	})
 	if json_err != nil {
 		logger.Error("error encoding json", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(201)
+	w.WriteHeader(200)
 }
 
 func (uc *UserController) Update(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +133,13 @@ func (uc *UserController) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err = uc.usecase.Enabled2FA(ID, userUpdateDto.Enabled2FA)
+
+	if err != nil {
+		uc.logger.Error("[#UserController.Update] Error trying to update User -> Error: ", err)
+		http.Error(w, "Error trying to update User ", http.StatusBadRequest)
+		return
+	}
 }
 
 func (uc *UserController) FindByID(w http.ResponseWriter, r *http.Request) {

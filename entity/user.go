@@ -19,7 +19,10 @@ type User struct {
 	PushNotificationsEnabled *bool             `json:"pushNotificationsEnabled" db:"pushNotificationsEnabled"`
 	CreatedAt                *time.Time        `json:"createdAt" db:"created_at"`
 	UpdatedAt                *time.Time        `json:"updatedAt" db:"updated_at"`
-	Adresses                 Address           `json:"addresses"`
+	Code2FA                  string            `json:"code2FA" db:"2fa_code"`
+	ExpireDate2FA            int               `json:"expireDate2FA" db:"2fa_expire_date"`
+	Enabled2FA               bool              `json:"enabled2FA" db:"2fa_enabled"`
+	Adresses                 Address
 }
 
 func NewUser(name, uType, document, avatar_url, email, phone, pass, city, state string, birthdate *time.Time) *User {
